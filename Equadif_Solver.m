@@ -1,8 +1,32 @@
-Iso_t := recformat<f, U0, V0, W0, G>;
+/***
+ *
+ *  Distributed under the terms of the GNU Lesser General Public License (L-GPL)
+ *                  http://www.gnu.org/licenses/
+ *
+ *  Copyright (C) 2022 E. Eid
+ */
+ 
+ 
 
+ /*
+   The following is a magma script that implements
+   the main algorithm of the paper "Efficient computation of Cantor's division polynomials of hyperelliptic curves over finite fields" 
+   by  E. Eid.
+
+*/
+
+
+// Some defines
+Iso_t := recformat<f, U0, V0, W0, G>;
 forward IsoSolveInternal, MySqrtInvPad, MySqrtInv, integral, MyInv, PolynomialChangePrecision, NewtonSumsAndDerivatives, MySqrtInvMod, MyInvMod, HankelProduct;
 
 
+// Main function
+// We look for a separable (ell, ..., ell)-isogeny defined over the p-adics from 
+// y^2 = hC(x) to y^2 = hD(x)
+// _Mij is the normalization matrix
+// _U0, _V0, _W0, _u0, _v0 are some initial conditions
+// PrP is the p-adic precision
 
 function EquadifSolver(ell , hC , hD , _Mij, _U0 , _V0, _W0,  _u0 , _v0, PrP)
   
@@ -41,8 +65,6 @@ function EquadifSolver(ell , hC , hD , _Mij, _U0 , _V0, _W0,  _u0 , _v0, PrP)
  
     u := t + u0;
 
-
-
     tm := Cputime(); 
 
     h := Parent(x)![ K!ChangeUniverse(Eltseq(Coefficient(hC , i-1)), Integers()) : i in [1..2*nb + 2] ];
@@ -52,7 +74,7 @@ function EquadifSolver(ell , hC , hD , _Mij, _U0 , _V0, _W0,  _u0 , _v0, PrP)
     r0 := 1 div v0;
     r1 := - (Coefficient(h,1) * r0) div (2*Coefficient(h,0));
     r2 := -(r0 * Coefficient(h,2)) div (2*Coefficient(h,0)) - (r1^2) div (2*r0) - ( r1 * Coefficient(h,1)) div Coefficient(h,0);
-    vinv := MySqrtInv(h, N: Timings := [], PRC0 := [* 2, [*r0 + r1*t + r2*t^2, 3*nb * ell +1*] *] );
+    vinv := MySqrtInv(h, N: PRC0 := [* 2, [*r0 + r1*t + r2*t^2, 3*nb * ell +1*] *] );
 
     G := [[L!vinv]];
     for i in [1..nb-1] do   
@@ -78,7 +100,7 @@ end function;
 
 
 
-
+// Solving the differential system 
 
 function IsoSolveInternal(N, Prc: Timings := [])
 
@@ -124,7 +146,7 @@ function IsoSolveInternal(N, Prc: Timings := [])
     idxtm +:= 1; _Timings[idxtm] +:= Cputime(tm);
     vprintf SEA, 2 : "\t\t... int (G - H(X)X')' \t\t: %o\n", Cputime(tm);
 
-    // U
+    // Computing U
     tm:= Cputime();
     D := z*Reverse(S!F);
     Q := U*D; Q:= S![Coefficient(Q,i) : i in [Degree(D)+1 .. 2*Degree(D)]];
@@ -143,7 +165,6 @@ end function;
 
 
 function PolynomialChangePrecision(P,N)
-
     S:=Parent(P);
     coeffs := Coefficients(P);
     return S![ChangePrecision(i,N) : i in coeffs];
@@ -152,203 +173,46 @@ end function;
 
 
 
-
-function MySqrtInvPad(A, n : Timings := [], PRC0 := [* 2, [**] *])
-
-    L := Parent(A); t := L.1;
-    K := BaseRing(L); PR := PolynomialRing(K);
-
-    N := ( AbsolutePrecision(A) - 1 ) div 2;
-    
-    // Initial condition (precision 2 is needed..)
-    if n le PRC0[1] then
-	Tm := Cputime();
-	
-	vprintf SEA, 2 : "\tFrom            1 to (n =) %3o", n;
-
-	if #(PRC0[2]) ne 0 then
-	    H := PRC0[2, 1];
-	else
-	    vprintf SEA, 3 : "\n";
-
-	    FF, redmap := ResidueClassField(K);
-	    Px := PolynomialRing(FF); x := Px.1;
-	    LF := ChangeRing(L, FF); f := LF.1;
-	    
-	    tm := Cputime();
-	    Cof, v := Coefficients(A);
-	    Ax := Px!Cof; if v ne 0 then Ax *:= x^v; end if;
-	    h0 := LF!Sqrt(Ax); ChangePrecision(~h0, N+1);
-	    vprintf SEA, 3 : "\t\t... h0\t\t\t: %o\n", Cputime(tm);
-	    
-	
-	    tm := Cputime();
-	    Cof, v := Coefficients(h0);
-	    H := L!Cof; if v ne 0 then H *:= t^v; end if; ChangePrecision(~H, N+1);
-	    vprintf SEA, 3 : "\t\t... H0\t\t\t: %o\n", Cputime(tm);
-	    
-	    tm := Cputime();
-	    G := ChangePrecision(A, N+1) - H^2;
-	    Cof, v := Coefficients(G); Gx := Px!((PR!Cof) div 4);
-	    g := LF!Coefficients(Gx); if v ne 0 then g *:= t^v; end if; ChangePrecision(~g, N+1);
-	    vprintf SEA, 3 : "\t\t... (F-H0^2)/4\t\t: %o\n", Cputime(tm);
-	    
-	    tm := Cputime();
-	    f0 := 1/h0;
-	    vprintf SEA, 3 : "\t\t... f0 := 1/h0\t\t: %o\n", Cputime(tm);
-	    
-	    tm := Cputime();
-	    g := g*f0^2;
-	    vprintf SEA, 3 : "\t\t... g*f0^2\t\t: %o\n", Cputime(tm);
-	    
-	    tm := Cputime();
-	    Cof, v := Coefficients(f0);
-	    F0 := L!Cof; if v ne 0 then F0 *:= t^v; end if; ChangePrecision(~F0, N+1);
-	    vprintf SEA, 3 : "\t\t... F0\t\t\t: %o\n", Cputime(tm);
-	    
-	    tm := Cputime();
-	    F0 := F0^2;
-	    vprintf SEA, 3 : "\t\t... F0^2\t\t: %o\n", Cputime(tm);
-	    
-	    tm := Cputime();
-	    cf := [FF|0 : i in [0..N] ];
-	    cf[1] := Roots(x^2 + x + Coefficient(g, 0))[1, 1];	
-	    for i := 1 to N do
-		e := Coefficient(g, i);
-		if i mod 2 eq 0 then e +:= cf[1+(i div 2)]^2; end if;
-		cf[1+i] := e;
-	    end for;
-	    h1 := LF!cf + O(f^(N+1));
-	    h1 *:=  h0;
-	    vprintf SEA, 3 : "\t\t... h1\t\t\t: %o\n", Cputime(tm);
-	    
-	    tm := Cputime();
-	    Cof, v := Coefficients(h1);
-	    H1 := L!Cof; if v ne 0 then H1 *:= t^v; end if; ChangePrecision(~H1, N+1);	
-	    H -:= 2*H1;
-	    vprintf SEA, 3 : "\t\t... h0-2*h1\t\t: %o\n", Cputime(tm);
-
-	    tm := Cputime();
-	    H := H * F0;
-	    vprintf SEA, 3 : "\t\t... (h0-2*h1)*F0^2\t: %o\n", Cputime(tm);
-
-	end if;
-
-	vprintf SEA, 2 : "\t... %o s\n", Cputime(Tm);
-	    
-	    
-	return H, [RealField(6) | Cputime(Tm), 0, 0, 0, 0 ];
-    end if;
-
-    // Let us recurse
-    m := Max(2, (n+2) div 2);
-    R, _Timings   := MySqrtInvPad(A, m : Timings := Timings, PRC0 := PRC0);
-
-    vprintf SEA, 2 : "\tFrom   (m+1=) %3o to (n =) %3o", m+1, n;
-	vprintf SEA, 3 : "\n";
-    Tm := Cputime(); idxtm := 1;
-
-    _A := ChangePrecision(A, N+1); _R := ChangePrecision(R, N+1);
-
-    // Newton iteration
-    tm := Cputime();
-    H := -_R^2;
-
-    idxtm +:= 1; _Timings[idxtm] +:= Cputime(tm);
-    vprintf SEA, 3 : "\t\t... R^2 \t\t: %o\n", Cputime(tm);
-
-    tm := Cputime();
-    H *:= _A; H +:= 3;
-
-    idxtm +:= 1; _Timings[idxtm] +:= Cputime(tm);
-    vprintf SEA, 3 : "\t\t... 3-A*R^2\t\t: %o\n", Cputime(tm);
-
-    tm := Cputime();
-    Cof, v := Coefficients(H);
-    H := L!Coefficients((PR!Cof) div 2); if v ne 0 then H *:= t^v; end if; ChangePrecision(~H, N+1);
-
-    idxtm +:= 1; _Timings[idxtm] +:= Cputime(tm);
-    vprintf SEA, 3 : "\t\t... (3-A*R^2)/2\t\t: %o\n", Cputime(tm);
-
-    tm := Cputime();
-    H *:= _R;
-
-    idxtm +:= 1; _Timings[idxtm] +:= Cputime(tm);
-    vprintf SEA, 3 : "\t\t... R*(3-A*R^2)/2\t: %o\n", Cputime(tm);
-
-    vprintf SEA, 2 : "\t... %o s\n", Cputime(Tm);
-
-    return H, _Timings;
-
-end function;
-
-
-// R_(i+1) = R_i + R_i/2 * (A*R_i^2 - 1)
-function MySqrtInv(A, N : Timings := [], PRC0 := [* 2, [**] *] )
+// 1 / sqrt(A) computed with a Newton iteration
+// --------------------------------------------
+function MySqrtInv(A, N : PRC0 := [* 2, [**] *] )
 
     L := Parent(A); t := L.1;
     K := BaseRing(L); PR := PolynomialRing(K);
 
     // Initial condition
     N0 := PRC0[1];
-    if N le N0 then
-	Tm := Cputime();
-	
-	vprintf SEA, 2 : "\tFrom            1 to (n =) %3o", N;
-
-	if #(PRC0[2]) ne 0 then
-	    H := PRC0[2, 1]; _Timings := [RealField(6) | Cputime(Tm), 0, 0, 0, 0 ];
-	else
-	    H, _Timings := MySqrtInvPad(ChangePrecision(A, N+1), Precision(K));
-	end if;
-	vprintf SEA, 2 : "\t... %o s\n", Cputime(Tm);
-	    
-	return H, [RealField(6) | Cputime(Tm), 0, 0, 0, 0 ];
-    end if;
+    if N le N0 then return PRC0[2, 1]; end if;
 
     // Let us recurse
-    M := Max(N0, ((N+2)) div 2);
-
-    R, _Timings, _   := MySqrtInv(A, M : Timings := Timings, PRC0 := PRC0);
-
-    vprintf SEA, 2 : "\tFrom   (M+1=) %3o to (N =) %3o", M+1, N;
-    vprintf SEA, 3 : "\n";
-    Tm := Cputime(); idxtm := 1;
-
+    M := Max(N0, (N+2) div 2);
+    R := MySqrtInv(A, M : PRC0 := PRC0);
     _A := ChangePrecision(A, N+1); _R := ChangePrecision(R, N+1);
 
     // Newton iteration
-    tm := Cputime();
+
+    /* R^2 */
     H := -_R^2;
 
-    idxtm +:= 1; _Timings[idxtm] +:= Cputime(tm);
-    vprintf SEA, 3 : "\t\t... R^2 \t\t: %o\n", Cputime(tm);
-
-    tm := Cputime();
+    /* 3-A*R^2 */
     H *:= _A; H +:= 3;
 
-    idxtm +:= 1; _Timings[idxtm] +:= Cputime(tm);
-    vprintf SEA, 3 : "\t\t... 3-A*R^2\t\t: %o\n", Cputime(tm);
-
-    tm := Cputime();
+    /* (3-A*R^2)/2 */
     Cof, v := Coefficients(H);
     H := L!Coefficients((PR!Cof) div 2); if v ne 0 then H *:= t^v; end if; ChangePrecision(~H, N+1);
 
-    idxtm +:= 1; _Timings[idxtm] +:= Cputime(tm);
-    vprintf SEA, 3 : "\t\t... (3-A*R^2)/2\t\t: %o\n", Cputime(tm);
-
-    tm := Cputime();
+    /* R*(3-A*R^2)/2 */
     H *:= _R;
 
-    idxtm +:= 1; _Timings[idxtm] +:= Cputime(tm);
-    vprintf SEA, 3 : "\t\t... R*(3-A*R^2)/2\t: %o\n", Cputime(tm);
-
-    vprintf SEA, 2 : "\t... %o s\n", Cputime(Tm);
-
-    return H, _Timings;
+    return H;
 
 end function;
 
+
+
+
+// Computing the integral F of a power series f s.t. F(0)=0
+// --------------------------------------------------------
 
 function integral(f)
 
@@ -361,6 +225,9 @@ return ChangePrecision(Parent(f) ! ([0 : i in [0..a]] cat [coeff[i] div (i+a) : 
 end function;
 
 
+
+// 1 / A computed with a Newton iteration
+// --------------------------------------
 function MyInv(A, N : PRC0 := [* 0, [**] *])
 
     L := Parent(A); t := L.1;
@@ -385,6 +252,8 @@ function MyInv(A, N : PRC0 := [* 0, [**] *])
 end function;
 
 
+// Half GCD (from Thome's PHD)
+// ---------------------------
 function PartialGCD(U, V, z, s)
 
     Px := Parent(U); X := Px.1; n := Degree(U);
@@ -411,6 +280,8 @@ function PartialGCD(U, V, z, s)
 end function;
 
 
+// Find A and B s.t. T = A / B
+// ---------------------------
 function FastBerlekampMassey(ell, T)
 
     L := Parent(T); t := L.1;
@@ -433,7 +304,8 @@ function FastBerlekampMassey(ell, T)
 end function;
 
 
-
+// Reduce mod. p 
+// -------------
 function PadicToFF(T)
 
     L := Parent(T); K := BaseRing(L);
@@ -450,7 +322,8 @@ return Tp;
 end function;
 
 
-
+// Computing the first N Newton sums s_i of P and (1/i)*ds_i/dt
+// ------------------------------------------------------------
 function NewtonSumsAndDerivatives(P , g, N)
 
     L:=CoefficientRing(P);
@@ -479,7 +352,8 @@ end function;
 
 
 
-
+// 1/Sqrt(T) mod. U computed with a Newton iteration
+// -------------------------------------------------
 function MySqrtInvMod(T,N,T0,U)
 
     L:=Parent(U); t := L.1;
@@ -499,30 +373,8 @@ end function;
 
 
 
-/* function MySqrtInvMod(T,N,T0,U : PRC0 := [*0 , [**] *])
-
-    L:=Parent(U); t := L.1;
-    T:= L![ChangePrecision(coeffs,N) : coeffs in Coefficients(T)];
-
-
-    if N lt PRC0[1] or N eq 1 then
-	if #(PRC0[2]) eq 0 then
-	    return L!T0, [*0 , [*L!T0*] *];
-	end if;
-	return PRC0[2, 1], PRC0;
-    end if;
-
-    M := Ceiling( (N)/2);
-    
-    u, PRC0 := MySqrtInvMod(T,M,T0,U);
-    u := L![ChangePrecision(i , N) : i in Coefficients(u)];
-    Res:= (u/2)*(-T*u^2 +3) mod U;
-    return  Res , [*N, [*Res*] *];
-
-end function;
-*/
-
-
+// 1/T mod. U computed with a Newton iteration
+// -------------------------------------------
 function MyInvMod(T,N,T0,U)
 
     L:=Parent(U); t := L.1;
@@ -544,7 +396,8 @@ end function;
 
 
 
-
+// Compute a Hankel matrix-vector product 
+// --------------------------------------
 function HankelProduct(v, b)   //v = [v0, v1 , ... , v2n-2], b =[b0,b1,...,bn-1]
 
     R<x> := PolynomialRing(Parent(v[1]));
@@ -561,6 +414,10 @@ function HankelProduct(v, b)   //v = [v0, v1 , ... , v2n-2], b =[b0,b1,...,bn-1]
 end function;
 
 
+
+
+// Arithmetic on Jacobians of hyperelliptic curves
+// -----------------------------------------------
 
 
 
@@ -646,3 +503,128 @@ function CantorExp(D, n)
 
     return y;
 end function;
+
+
+// Application to the multiplication by ell
+// Initial condition is needed
+// -----------------------------------------
+
+SetVerbose("SEA", 0);
+
+/* g: genus, p: characteristic */
+g := 4; p := 5;
+ell := 20; PadicTimings := [];
+
+
+repeat
+
+    repeat
+        ell := ell +1;
+    until ell mod p ne 0;
+
+    PrP :=  10+ Floor(Log(p, 3*g*ell^2));
+    
+    "---";
+    "- p =", p, ", ell =", ell, ", genus =", g, ", PrP = ", PrP;
+    "-----------------------------------------";
+
+    FF := GF(p); K := pAdicField(p ,PrP);
+    _<x> := PolynomialRing(FF); S<z> := PolynomialRing(K);
+    t:=0;
+
+    while t eq 0 do 
+    try 
+        repeat
+            repeat
+                repeat
+                    hC1 := RandomIrreduciblePolynomial(FF,2*g+1) ;
+                    H := HyperellipticCurve(hC1); J := Jacobian(H);
+                until #H ne 1;
+                repeat
+                    PtF:=Random(H);
+                until PtF[3] ne 0;
+                PF := J![x - PtF[1] , PtF[2]]; QF := ell *PF;           
+            until Degree(QF[1]) eq g and Discriminant(QF[1]) ne 0  and Degree(QF[2]) eq g-1; //QF must be generic 
+
+            f := QF[1]; 
+            hC:= S!hC1;
+            H := HyperellipticCurve(hC); J := Jacobian(H);
+            Pt:= Points(H , PtF[1])[1];
+            if Valuation(K!PtF[2] - Pt[2]) lt 1 then 
+                Pt:= Points(H , PtF[1])[2];
+            end if;
+            P := J![z - Pt[1] , Pt[2]]; Q := CantorExp(P, ell);
+
+        until Degree(Q[1]) eq g and Valuation(Discriminant(Q[1])) eq 0  and Precision(Coefficient(Q[1], 0)) ge 1+Floor(Log(p, 3*g*ell^2));
+        t:=1;
+    catch e 
+        t:=0;
+    end try;
+    end while;
+ 
+ 
+
+    PrP :=  1 + Floor(Log(p, 2*g*ell^2));
+    K := pAdicField(p ,PrP); 
+    L<t> := LaurentSeriesRing(K, 2*g*ell^2); S<z> := PolynomialRing(L);
+
+    _U0 := S!Q[1]; _V0:= S!Q[2]; hC := S!hC;
+    _,_,_W0:=XGCD(Q[1], Q[2]); _W0:=S!_W0; 
+
+    
+    _u0 := K!Evaluate(-P[1] ,0) ; _v0 := K!Evaluate( P[2], 0);
+    _Mij := DiagonalMatrix( K , g , [ell : i in [1..g]]);
+
+
+    U,vinv,timings:= EquadifSolver(ell^2  , hC , hC , _Mij, _U0, _V0, _W0, _u0 , _v0,PrP);
+    tm:= Cputime();
+    
+     // Computing the coefficients of the first Mumford coordinate: U
+     // -------------------------------------------------------------
+     
+    ListOfCoeffs := Coefficients(U);
+    ListOfCoeffs:= [ PadicToFF(i) : i in ListOfCoeffs];
+
+    Num, Denom:= FastBerlekampMassey( g*ell^2, ListOfCoeffs[1]); 
+
+    L<t> := LaurentSeriesRing(FF , g*ell^2+1);
+    Denom_U := L!Denom;
+    Nums_U :=  [L!Num] cat [(Denom_U*L!ListOfCoeffs[k]) : k in [2..#ListOfCoeffs]];
+    Nums_U:= [ Parent(Num)!Coefficients(i) : i in Nums_U]; // The numerators and the denominator of the coefficients of U are calculated up to a translation
+
+    
+    // Computing the coefficients of the second Mumford coordinate: V 
+    // --------------------------------------------------------------
+
+    N:=3*g*ell^2+ 2*g+2;
+    L<t> := LaurentSeriesRing(FF , N);
+    Denom_inv := MyInv(L!Denom_U, N);
+    ListOfCoeffs_V:=[ChangePrecision(L!i, N)*Denom_inv : i in Nums_U];
+
+    P<x> := PolynomialRing(L);
+    U_V := P!ListOfCoeffs_V;
+
+    hC := P![ChangePrecision(i,N ) : i in Coefficients(hC)];
+    _W0:= P![ChangePrecision(i, N ) : i in Coefficients(_W0)];
+    v_sq:= Evaluate(hC , t + PtF[1]);
+
+    V:= MySqrtInvMod(v_sq* hC, N, (1/PtF[2])*_W0, U_V ) ;
+    V := hC * v_sq * V mod U_V;
+    ListOfCoeffs_V:= Coefficients(V);
+
+    
+    L<t> := LaurentSeriesRing(FF , Floor(N/2+1));
+
+    Num_V, Denom_V:= FastBerlekampMassey( Floor(N/2), ListOfCoeffs_V[1] );
+
+    Denom_V := L!Denom_V;
+    Nums_V :=  [L!Num_V] cat [(Denom_V*L!ListOfCoeffs_V[k]) : k in [2..#ListOfCoeffs_V]];
+    Nums_V:= [ Parent(Num_V)!Coefficients(i) : i in Nums_V]; // The numerators and the denominator of the coefficients of V are calculated up to a translation
+
+    tm := Cputime(tm);
+
+    Append(~PadicTimings, <ell^2,timings cat [tm]>);
+
+until ell gt 100;
+
+
